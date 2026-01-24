@@ -1,7 +1,8 @@
 <?php
 header("Content-Type: application/json");
+date_default_timezone_set("Asia/Kolkata");
 
-/* 🔥 ENABLE ERRORS TEMPORARILY */
+/* ✅ DEBUG MODE (turn OFF after testing) */
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
@@ -25,25 +26,61 @@ if ($email === '') {
     exit;
 }
 
+/* ================= CHECK USER EXISTS ================= */
+$userCheck = $conn->prepare(
+    "SELECT id FROM users WHERE email = ? LIMIT 1"
+);
+
+if (!$userCheck) {
+    echo json_encode([
+        "success" => false,
+        "message" => "Database error"
+    ]);
+    exit;
+}
+
+$userCheck->bind_param("s", $email);
+$userCheck->execute();
+$userCheck->store_result();
+
+if ($userCheck->num_rows !== 1) {
+    echo json_encode([
+        "success" => false,
+        "message" => "Email not registered"
+    ]);
+    exit;
+}
+
 /* ================= GENERATE OTP ================= */
-$otp = (string) rand(100000, 999999);
+$otp = strval(rand(100000, 999999));
 
 /* ================= DELETE OLD OTP ================= */
-$del = $conn->prepare("DELETE FROM otp_verification WHERE email=?");
-$del->bind_param("s", $email);
-$del->execute();
+$deleteOtp = $conn->prepare(
+    "DELETE FROM otp_verification WHERE email = ?"
+);
+$deleteOtp->bind_param("s", $email);
+$deleteOtp->execute();
 
 /* ================= INSERT OTP ================= */
-$stmt = $conn->prepare(
+$insertOtp = $conn->prepare(
     "INSERT INTO otp_verification (email, otp, expires_at)
      VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 5 MINUTE))"
 );
-$stmt->bind_param("ss", $email, $otp);
 
-if (!$stmt->execute()) {
+if (!$insertOtp) {
     echo json_encode([
         "success" => false,
-        "message" => "OTP DB insert failed"
+        "message" => "OTP prepare failed"
+    ]);
+    exit;
+}
+
+$insertOtp->bind_param("ss", $email, $otp);
+
+if (!$insertOtp->execute()) {
+    echo json_encode([
+        "success" => false,
+        "message" => "OTP insert failed"
     ]);
     exit;
 }
@@ -52,23 +89,16 @@ if (!$stmt->execute()) {
 $mail = new PHPMailer(true);
 
 try {
-    /* 🔥 SHOW SMTP ERROR */
-    $mail->SMTPDebug = 2; // IMPORTANT
-    $mail->Debugoutput = 'error_log';
-
     $mail->isSMTP();
-    $mail->Host       = "smtp.gmail.com";
-    $mail->SMTPAuth   = true;
-    $mail->Username   = "adicharan40@gmail.com";
-    $mail->Password   = "vtsvlasfuluuzhww"; // App password
+    $mail->Host = "smtp.gmail.com";
+    $mail->SMTPAuth = true;
+    $mail->Username = "adicharan40@gmail.com";
+    $mail->Password = "vtsvlasfuluuzhww"; // app password
     $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
-    $mail->Port       = 465;
-
-    $mail->CharSet = "UTF-8";
+    $mail->Port = 465;
 
     $mail->setFrom("adicharan40@gmail.com", "FarmFresh");
     $mail->addAddress($email);
-
     $mail->isHTML(true);
     $mail->Subject = "FarmFresh OTP Verification";
     $mail->Body = "
@@ -88,10 +118,8 @@ try {
     ]);
 
 } catch (Exception $e) {
-
-    /* 🔴 RETURN REAL ERROR */
     echo json_encode([
         "success" => false,
-        "message" => "Mailer Error: " . $mail->ErrorInfo
+        "message" => "Email send failed: " . $mail->ErrorInfo
     ]);
 }

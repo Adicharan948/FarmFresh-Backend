@@ -1,29 +1,63 @@
 <?php
+header("Content-Type: application/json");
+
+/* 🔒 Production safe */
+error_reporting(0);
+ini_set('display_errors', 0);
+
 include "db.php";
 
-$user_id = $_POST['user_id'] ?? 0;
-$farm_name = $_POST['farm_name'] ?? '';
-$location = $_POST['location'] ?? '';
-$description = $_POST['description'] ?? '';
+/* ================= RECEIVE DATA ================= */
+$user_id     = intval($_POST['user_id'] ?? 0);
+$farm_name   = trim($_POST['farm_name'] ?? '');
+$location    = trim($_POST['location'] ?? '');
+$description = trim($_POST['description'] ?? '');
 
-if ($user_id == 0) {
-    echo json_encode(["success"=>false,"message"=>"Invalid user"]);
+/* ================= VALIDATION ================= */
+if ($user_id <= 0 || $farm_name === '' || $location === '') {
+    echo json_encode([
+        "success" => false,
+        "message" => "Invalid farm data"
+    ]);
     exit;
 }
 
+/* ================= INSERT / UPDATE ================= */
 $stmt = $conn->prepare(
-    "INSERT INTO farms (farmer_id, farm_name, location, description)
+    "INSERT INTO farms (user_id, farm_name, location, description)
      VALUES (?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
-     farm_name=?, location=?, description=?"
+        farm_name = VALUES(farm_name),
+        location = VALUES(location),
+        description = VALUES(description)"
 );
+
+if (!$stmt) {
+    echo json_encode([
+        "success" => false,
+        "message" => "Database prepare failed"
+    ]);
+    exit;
+}
 
 $stmt->bind_param(
-    "issssss",
-    $user_id, $farm_name, $location, $description,
-    $farm_name, $location, $description
+    "isss",
+    $user_id,
+    $farm_name,
+    $location,
+    $description
 );
 
-$stmt->execute();
+if (!$stmt->execute()) {
+    echo json_encode([
+        "success" => false,
+        "message" => "Failed to save farm profile"
+    ]);
+    exit;
+}
 
-echo json_encode(["success"=>true]);
+/* ================= SUCCESS ================= */
+echo json_encode([
+    "success" => true,
+    "message" => "Farm profile saved successfully"
+]);

@@ -1,0 +1,30 @@
+<?php
+header("Content-Type: application/json; charset=UTF-8");
+include 'db.php';
+$response = array();
+// Query to count products per category
+// Assuming table is 'products' and column is 'category'
+$query = "SELECT category, COUNT(*) as count FROM products GROUP BY category";
+$result = mysqli_query($conn, $query);
+if ($result) {
+    if (mysqli_num_rows($result) > 0) {
+        $response['success'] = true;
+        $response['counts'] = array();
+        
+        while ($row = mysqli_fetch_assoc($result)) {
+            $item = array();
+            $item['category'] = $row['category'];
+            $item['count'] = $row['count'];
+            array_push($response['counts'], $item);
+        }
+    } else {
+        $response['success'] = true;
+        $response['counts'] = array(); // Empty list if no products
+        $response['message'] = "No products found";
+    }
+} else {
+    $response['success'] = false;
+    $response['message'] = "Database Error: " . mysqli_error($conn);
+}
+echo json_encode($response);
+?>

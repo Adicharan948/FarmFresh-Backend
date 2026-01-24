@@ -1,42 +1,35 @@
 <?php
 header("Content-Type: application/json");
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
+error_reporting(0);
+ini_set('display_errors', 0);
+date_default_timezone_set("Asia/Kolkata");
 include "db.php";
-
-/* ================= RECEIVE DATA ================= */
-$email = trim($_POST['email'] ?? '');
+$email    = trim($_POST['email'] ?? '');
 $password = trim($_POST['password'] ?? '');
-
-if ($email === '' || $password === '') {
+$role     = trim($_POST['role'] ?? '');
+if ($email === '' || $password === '' || $role === '') {
     echo json_encode([
         "success" => false,
-        "message" => "Email and password required"
+        "message" => "Email, password and role required"
     ]);
     exit;
 }
-
-/* ================= CHECK USER ================= */
 $stmt = $conn->prepare(
-    "SELECT id, password, role, is_verified
+    "SELECT id, name, password, role, is_verified
      FROM users
      WHERE email = ?
      LIMIT 1"
 );
-
 if (!$stmt) {
     echo json_encode([
         "success" => false,
-        "message" => "Query prepare failed"
+        "message" => "Database error"
     ]);
     exit;
 }
-
 $stmt->bind_param("s", $email);
 $stmt->execute();
 $result = $stmt->get_result();
-
 if ($result->num_rows !== 1) {
     echo json_encode([
         "success" => false,
@@ -44,10 +37,7 @@ if ($result->num_rows !== 1) {
     ]);
     exit;
 }
-
 $user = $result->fetch_assoc();
-
-/* ================= VERIFY PASSWORD ================= */
 if (!password_verify($password, $user['password'])) {
     echo json_encode([
         "success" => false,
@@ -55,8 +45,13 @@ if (!password_verify($password, $user['password'])) {
     ]);
     exit;
 }
-
-/* ================= CHECK VERIFIED ================= */
+if ($role !== $user['role']) {
+    echo json_encode([
+        "success" => false,
+        "message" => "Invalid role selected"
+    ]);
+    exit;
+}
 if ((int)$user['is_verified'] !== 1) {
     echo json_encode([
         "success" => false,
@@ -64,11 +59,11 @@ if ((int)$user['is_verified'] !== 1) {
     ]);
     exit;
 }
-
-/* ================= SUCCESS ================= */
 echo json_encode([
     "success" => true,
     "user_id" => (int)$user['id'],
+    "name"    => $user['name'],
     "role"    => $user['role'],
     "message" => "Login successful"
 ]);
+?>

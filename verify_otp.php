@@ -1,11 +1,10 @@
 <?php
 header("Content-Type: application/json");
-
-/* 🔒 Production safe */
-error_reporting(0);
-ini_set('display_errors', 0);
-
 date_default_timezone_set("Asia/Kolkata");
+
+/* ✅ TEMP DEBUG (turn OFF after testing) */
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 
 include "db.php";
 
@@ -13,7 +12,6 @@ include "db.php";
 $email = trim($_POST['email'] ?? '');
 $otp   = trim($_POST['otp'] ?? '');
 
-/* ================= VALIDATION ================= */
 if ($email === '' || $otp === '') {
     echo json_encode([
         "success" => false,
@@ -23,27 +21,23 @@ if ($email === '' || $otp === '') {
 }
 
 /* ================= VERIFY OTP ================= */
-$sql = "
-    SELECT id
-    FROM otp_verification
-    WHERE email = ?
-      AND otp = ?
-      AND expires_at >= NOW()
-    ORDER BY id DESC
-    LIMIT 1
-";
-
-$stmt = $conn->prepare($sql);
+$stmt = $conn->prepare(
+    "SELECT email
+     FROM otp_verification
+     WHERE email = ?
+       AND otp = ?
+       AND expires_at >= NOW()
+     LIMIT 1"
+);
 
 if (!$stmt) {
     echo json_encode([
         "success" => false,
-        "message" => "Database error"
+        "message" => "Database error (OTP check)"
     ]);
     exit;
 }
 
-/* OTP AS STRING */
 $stmt->bind_param("ss", $email, $otp);
 $stmt->execute();
 $stmt->store_result();
@@ -56,13 +50,31 @@ if ($stmt->num_rows !== 1) {
     exit;
 }
 
-/* ================= DELETE OTP AFTER SUCCESS ================= */
-$del = $conn->prepare("DELETE FROM otp_verification WHERE email = ?");
-$del->bind_param("s", $email);
-$del->execute();
+/* ================= MARK USER AS VERIFIED ================= */
+$verifyUser = $conn->prepare(
+    "UPDATE users SET is_verified = 1 WHERE email = ?"
+);
+
+if (!$verifyUser) {
+    echo json_encode([
+        "success" => false,
+        "message" => "User verification failed"
+    ]);
+    exit;
+}
+
+$verifyUser->bind_param("s", $email);
+$verifyUser->execute();
+
+/* ================= DELETE USED OTP ================= */
+$deleteOtp = $conn->prepare(
+    "DELETE FROM otp_verification WHERE email = ?"
+);
+$deleteOtp->bind_param("s", $email);
+$deleteOtp->execute();
 
 /* ================= SUCCESS ================= */
 echo json_encode([
     "success" => true,
-    "message" => "OTP verified successfully"
+    "message" => "Email verified successfully"
 ]);
